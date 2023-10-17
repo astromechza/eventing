@@ -3,3 +3,25 @@ services:
   eventing-api:
     build:
       context: .
+    command:
+      - '--conn'
+      - 'postgres://root:PassW0rd@db/eventing?sslmode=disable'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:14-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - /var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: eventing
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: PassW0rd
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
