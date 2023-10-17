@@ -1,0 +1,5 @@
+services:
+
+  eventing-api:
+    build:
+      context: .
