@@ -4,7 +4,7 @@ CREATE TABLE workspaces (
       revision bigint NOT NULL,
       raw bytea NOT NULL
 );
-CREATE TABLE workspaces_changes (
+CREATE TABLE workspace_changes (
     entry bigint NOT NULL PRIMARY KEY,
     uid text NOT NULL,
     revision bigint NOT NULL,
@@ -15,5 +15,5 @@ CREATE SEQUENCE workspace_change_entry AS bigint INCREMENT BY 1 MINVALUE 1 CACHE
 
 -- +goose Down
 DROP TABLE IF EXISTS workspaces;
-DROP TABLE IF EXISTS workspaces_changes;
+DROP TABLE IF EXISTS workspace_changes;
 DROP SEQUENCE IF EXISTS workspace_change_entry;

@@ -41,18 +41,18 @@ type ErrNotExist struct {
 	Inner error
 }
 
-func (e *ErrNotExist) Error() string {
-	if e == nil || e.Inner == nil {
+func (e ErrNotExist) Error() string {
+	if e.Inner == nil {
 		return "not found"
 	}
 	return fmt.Sprintf("not found: %v", e.Inner)
 }
 
-func (e *ErrNotExist) String() string {
+func (e ErrNotExist) String() string {
 	return e.Error()
 }
 
-func (e *ErrNotExist) Unwrap() error {
+func (e ErrNotExist) Unwrap() error {
 	return e.Inner
 }
 
@@ -60,17 +60,17 @@ type ErrIncorrectRevision struct {
 	Inner error
 }
 
-func (e *ErrIncorrectRevision) Error() string {
-	if e == nil || e.Inner == nil {
+func (e ErrIncorrectRevision) Error() string {
+	if e.Inner == nil {
 		return "incorrect revision"
 	}
 	return fmt.Sprintf("incorrect revision: %v", e.Inner)
 }
 
-func (e *ErrIncorrectRevision) String() string {
+func (e ErrIncorrectRevision) String() string {
 	return e.Error()
 }
 
-func (e *ErrIncorrectRevision) Unwrap() error {
+func (e ErrIncorrectRevision) Unwrap() error {
 	return e.Inner
 }
