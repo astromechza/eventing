@@ -1,0 +1,31 @@
+syntax = "proto3";
+package eventing;
+
+import "google/protobuf/timestamp.proto";
+option go_package = "github.com/astromechza/eventing/internal/model";
+
+message Workspace {
+  string uid = 1;
+  int64 oldest_revision = 2;
+  int64 newest_revision = 3;
+  string display_name = 4;
+  google.protobuf.Timestamp created_at = 5;
+  enum Lifecycle {
+    LIFECYCLE_ACTIVE = 0;
+  }
+  Lifecycle lifecycle = 6;
+}
+
+message WorkspaceTombstone {
+  string uid = 1;
+  int64 newest_revision = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message WorkspaceChange {
+  int64 entry = 1;
+  oneof payload {
+    Workspace workspace = 2;
+    WorkspaceTombstone tombstone = 3;
+  }
+}
