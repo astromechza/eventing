@@ -25,12 +25,17 @@ type DataAccess interface {
 	// at the given revision number.
 	DeleteWorkspace(ctx context.Context, ws *Workspace) error
 	// ListWorkspaceChanges returns a list of changes for all workspaces since the last cursor.
-	ListWorkspaceChanges(ctx context.Context, cursor []byte, limit int) (page *WorkspaceChangePage, err error)
-	// StreamWorkspaceChanges returns a channel that will be populated with workspace change items as updates are
-	// detected. The channel will be closed if the system is shutting down or the client is not keeping up with the
-	// rate of items being emitted.
-	StreamWorkspaceChanges(ctx context.Context, cursor []byte) (stream <-chan *WorkspaceChangePage, err error)
+	ListWorkspaceChanges(ctx context.Context, cursor []byte, limit int, limitUids []string) (page *WorkspaceChangePage, err error)
+	// ListenWorkspaceUidChanges will notify the given channel with the changed uid when we know that the item
+	// has received a change. The channel will be closed if the client does not keep up with the update rate or the
+	// system is shutting down.
+	ListenWorkspaceUidChanges(ctx context.Context, limitUids []string, output chan string) error
+	// CompactWorkspaceChanges will delete old workspace change entries for the given uid lower than revision. This is
+	// a very naive compaction algorithm and relies on the caller having already acquired knowledge via ListWorkspaceChanges.
+	CompactWorkspaceChanges(ctx context.Context, uid string, revision int64) (int, error)
 }
+
+// TODO: add created at to workspace change as well
 
 type WorkspaceChangePage struct {
 	Changes    []*WorkspaceChange

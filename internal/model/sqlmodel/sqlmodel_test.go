@@ -3,6 +3,7 @@ package sqlmodel
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/astromechza/eventing/internal/model"
 )
 
+//goland:noinspection SqlWithoutWhere
 func TestRealSql(t *testing.T) {
 	dbUrl := os.Getenv("DB_URL")
 	if dbUrl == "" {
@@ -29,6 +31,29 @@ func TestRealSql(t *testing.T) {
 	require.NoError(t, err)
 	_, err = da.pool.Exec(rootContext, `DELETE FROM workspace_changes`)
 	require.NoError(t, err)
+
+	wg := sync.WaitGroup{}
+	notifications := make([]string, 0)
+	subCtx, subCancel := context.WithCancel(rootContext)
+	defer subCancel()
+	{
+		conn, err := da.pool.Acquire(rootContext)
+		require.NoError(t, err)
+		defer conn.Release()
+		_, err = conn.Exec(rootContext, `LISTEN `+NotificationChannel)
+		require.NoError(t, err)
+		wg.Add(1)
+		go func() {
+			for {
+				notification, err := conn.Conn().WaitForNotification(subCtx)
+				if err != nil {
+					break
+				}
+				notifications = append(notifications, notification.Payload)
+			}
+			wg.Done()
+		}()
+	}
 
 	var ws *model.Workspace
 	t.Run("can create a workspace", func(t *testing.T) {
@@ -100,23 +125,23 @@ func TestRealSql(t *testing.T) {
 	})
 
 	t.Run("the changes list contains the entries for this row", func(t *testing.T) {
-		changes, err := da.ListWorkspaceChanges(rootContext, nil, 100)
+		changes, err := da.ListWorkspaceChanges(rootContext, nil, 100, []string{ws.Uid})
 		if assert.NoError(t, err) {
-			assert.Greater(t, len(changes.Changes), 0)
-			filtered := make([]*model.WorkspaceChange, 0)
-			for _, c := range changes.Changes {
-				if c.GetTombstone() != nil && c.GetTombstone().Uid == ws.Uid {
-					filtered = append(filtered, c)
-				} else if c.GetWorkspace() != nil && c.GetWorkspace().Uid == ws.Uid {
-					filtered = append(filtered, c)
-				}
-			}
+			filtered := changes.Changes
 			assert.Len(t, filtered, 3)
 			assert.Equal(t, 1, int(filtered[0].GetWorkspace().GetNewestRevision()))
 			assert.Equal(t, 2, int(filtered[1].GetWorkspace().GetNewestRevision()))
 			assert.Equal(t, 3, int(filtered[2].GetTombstone().GetNewestRevision()))
 			assert.Greater(t, filtered[1].Entry, filtered[0].Entry)
 			assert.Greater(t, filtered[2].Entry, filtered[1].Entry)
+		}
+	})
+
+	t.Run("and no changes for an unknown row", func(t *testing.T) {
+		changes, err := da.ListWorkspaceChanges(rootContext, nil, 100, []string{"unknown"})
+		if assert.NoError(t, err) {
+			filtered := changes.Changes
+			assert.Len(t, filtered, 0)
 		}
 	})
 
@@ -130,6 +155,20 @@ func TestRealSql(t *testing.T) {
 			_, err = da.CreateWorkspace(rootContext, ws)
 			assert.NoError(t, err)
 		}
+	})
+
+	t.Run("the changes list is limited to 100", func(t *testing.T) {
+		changes, err := da.ListWorkspaceChanges(rootContext, nil, 100, nil)
+		if assert.NoError(t, err) {
+			assert.Len(t, changes.Changes, 100)
+		}
+	})
+
+	t.Run("notifications were received", func(t *testing.T) {
+		subCancel()
+		wg.Wait()
+		t.Logf("got %d notifications", len(notifications))
+		assert.Len(t, notifications, 1003)
 	})
 
 }

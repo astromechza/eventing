@@ -19,13 +19,13 @@ message Workspace {
 message WorkspaceTombstone {
   string uid = 1;
   int64 newest_revision = 2;
-  google.protobuf.Timestamp created_at = 3;
 }
 
 message WorkspaceChange {
   int64 entry = 1;
+  google.protobuf.Timestamp at = 2;
   oneof payload {
-    Workspace workspace = 2;
-    WorkspaceTombstone tombstone = 3;
+    Workspace workspace = 3;
+    WorkspaceTombstone tombstone = 4;
   }
 }
