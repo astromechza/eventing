@@ -25,7 +25,7 @@ type DataAccess interface {
 	// at the given revision number.
 	DeleteWorkspace(ctx context.Context, ws *Workspace) error
 	// ListWorkspaceChanges returns a list of changes for all workspaces since the last cursor.
-	ListWorkspaceChanges(ctx context.Context, cursor []byte) (page *WorkspaceChangePage, err error)
+	ListWorkspaceChanges(ctx context.Context, cursor []byte, limit int) (page *WorkspaceChangePage, err error)
 	// StreamWorkspaceChanges returns a channel that will be populated with workspace change items as updates are
 	// detected. The channel will be closed if the system is shutting down or the client is not keeping up with the
 	// rate of items being emitted.

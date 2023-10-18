@@ -99,4 +99,37 @@ func TestRealSql(t *testing.T) {
 		assert.ErrorAs(t, err, &errAs)
 	})
 
+	t.Run("the changes list contains the entries for this row", func(t *testing.T) {
+		changes, err := da.ListWorkspaceChanges(rootContext, nil, 100)
+		if assert.NoError(t, err) {
+			assert.Greater(t, len(changes.Changes), 0)
+			filtered := make([]*model.WorkspaceChange, 0)
+			for _, c := range changes.Changes {
+				if c.GetTombstone() != nil && c.GetTombstone().Uid == ws.Uid {
+					filtered = append(filtered, c)
+				} else if c.GetWorkspace() != nil && c.GetWorkspace().Uid == ws.Uid {
+					filtered = append(filtered, c)
+				}
+			}
+			assert.Len(t, filtered, 3)
+			assert.Equal(t, 1, int(filtered[0].GetWorkspace().GetNewestRevision()))
+			assert.Equal(t, 2, int(filtered[1].GetWorkspace().GetNewestRevision()))
+			assert.Equal(t, 3, int(filtered[2].GetTombstone().GetNewestRevision()))
+			assert.Greater(t, filtered[1].Entry, filtered[0].Entry)
+			assert.Greater(t, filtered[2].Entry, filtered[1].Entry)
+		}
+	})
+
+	t.Run("add 1000", func(t *testing.T) {
+		for i := 0; i < 1000; i++ {
+			ws = new(model.Workspace)
+			ws.Reset()
+			ws.DisplayName = "my workspace"
+			ws.CreatedAt = timestamppb.Now()
+			ws.Lifecycle = model.Workspace_LIFECYCLE_ACTIVE
+			_, err = da.CreateWorkspace(rootContext, ws)
+			assert.NoError(t, err)
+		}
+	})
+
 }

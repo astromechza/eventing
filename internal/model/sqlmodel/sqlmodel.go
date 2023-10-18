@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -204,9 +205,70 @@ func (s *SqlDataAccess) DeleteWorkspace(ctx context.Context, ws *model.Workspace
 	return nil
 }
 
-func (s *SqlDataAccess) ListWorkspaceChanges(ctx context.Context, cursor []byte) (page *model.WorkspaceChangePage, err error) {
-	//TODO implement me
-	panic("implement me")
+func (s *SqlDataAccess) ListWorkspaceChanges(ctx context.Context, cursor []byte, limit int) (page *model.WorkspaceChangePage, err error) {
+	baseEntry := uint64(0)
+	if cursor != nil {
+		if len(cursor) != 8 {
+			return nil, fmt.Errorf("invalid cursor")
+		}
+		baseEntry = binary.BigEndian.Uint64(cursor)
+	}
+	if limit <= 0 {
+		return nil, fmt.Errorf("list limit must be > 0")
+	}
+	rows, err := s.pool.Query(ctx, `SELECT entry, uid, revision, raw, tombstone FROM workspace_changes WHERE entry > $1 ORDER BY entry LIMIT $2`, baseEntry, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to select rows: %w", err)
+	}
+	defer rows.Close()
+
+	page = &model.WorkspaceChangePage{}
+	items := make([]*model.WorkspaceChange, 0)
+	for rows.Next() {
+		var entry int64
+		var uid string
+		var revision int64
+		var raw []byte
+		var tombstone bool
+		if err = rows.Scan(&entry, &uid, &revision, &raw, &tombstone); err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		change := new(model.WorkspaceChange)
+		change.Reset()
+		if tombstone {
+			change.Entry = entry
+			change.Payload = &model.WorkspaceChange_Tombstone{
+				Tombstone: &model.WorkspaceTombstone{
+					Uid:            uid,
+					NewestRevision: revision,
+				},
+			}
+			items = append(items, change)
+		} else {
+			var ws model.Workspace
+			if err := proto.Unmarshal(raw, &ws); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal workspace: %w", err)
+			}
+			change.Entry = entry
+			change.Payload = &model.WorkspaceChange_Workspace{
+				Workspace: &ws,
+			}
+			items = append(items, change)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate rows: %w", err)
+	}
+	page.Changes = items
+
+	if len(page.Changes) > 0 {
+		out := make([]byte, 8)
+		binary.BigEndian.PutUint64(out, uint64(page.Changes[len(page.Changes)-1].Entry))
+		page.NextCursor = out
+	} else {
+		page.NextCursor = cursor
+	}
+	return page, nil
 }
 
 func (s *SqlDataAccess) StreamWorkspaceChanges(ctx context.Context, cursor []byte) (stream <-chan *model.WorkspaceChangePage, err error) {
