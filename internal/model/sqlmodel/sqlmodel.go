@@ -20,6 +20,7 @@ import (
 )
 
 const AdvisoryLockWorkspaceChanges = 10001
+const NotificationChannel = "workspace_changes"
 
 //go:embed migraions/*.sql
 var embedMigrations embed.FS
@@ -131,6 +132,10 @@ func (s *SqlDataAccess) CreateWorkspace(ctx context.Context, ws *model.Workspace
 		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
 
+	if _, err := s.pool.Exec(ctx, `SELECT pg_notify($1, $2)`, NotificationChannel, fmt.Sprintf("%s,%d,%v", ws.Uid, ws.NewestRevision, false)); err != nil {
+		return nil, fmt.Errorf("failed to emit notification: %w", err)
+	}
+
 	return ws, nil
 }
 
@@ -169,6 +174,10 @@ func (s *SqlDataAccess) UpdateWorkspace(ctx context.Context, ws *model.Workspace
 		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
 
+	if _, err := s.pool.Exec(ctx, `SELECT pg_notify($1, $2)`, NotificationChannel, fmt.Sprintf("%s,%d,%v", ws.Uid, ws.NewestRevision, false)); err != nil {
+		return nil, fmt.Errorf("failed to emit notification: %w", err)
+	}
+
 	return ws, nil
 }
 
@@ -200,6 +209,10 @@ func (s *SqlDataAccess) DeleteWorkspace(ctx context.Context, ws *model.Workspace
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit: %w", err)
+	}
+
+	if _, err := s.pool.Exec(ctx, `SELECT pg_notify($1, $2)`, NotificationChannel, fmt.Sprintf("%s,%d,%v", ws.Uid, ws.NewestRevision+1, true)); err != nil {
+		return fmt.Errorf("failed to emit notification: %w", err)
 	}
 
 	return nil
