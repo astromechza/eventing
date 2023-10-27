@@ -24,12 +24,14 @@ type DataAccess interface {
 	// DeleteWorkspace deletes the workspace permanently. It will return an error if the workspace doesn't already exist
 	// at the given revision number.
 	DeleteWorkspace(ctx context.Context, ws *Workspace) error
+	// PeekLastWorkspaceChange returns the last cursor available or an error
+	PeekLastWorkspaceChange(ctx context.Context) (cursor []byte, err error)
 	// ListWorkspaceChanges returns a list of changes for all workspaces since the last cursor.
 	ListWorkspaceChanges(ctx context.Context, cursor []byte, limit int, limitUids []string) (page *WorkspaceChangePage, err error)
-	// ListenWorkspaceUidChanges will notify the given channel with the changed uid when we know that the item
+	// ListenForWorkspaceUidChanges will notify the given channel with the changed uid when we know that the item
 	// has received a change. The channel will be closed if the client does not keep up with the update rate or the
 	// system is shutting down.
-	ListenWorkspaceUidChanges(ctx context.Context, limitUids []string, output chan string) error
+	ListenForWorkspaceUidChanges(ctx context.Context, filterUids []string, output chan string) (error, func())
 	// CompactWorkspaceChanges will delete old workspace change entries for the given uid lower than revision. This is
 	// a very naive compaction algorithm and relies on the caller having already acquired knowledge via ListWorkspaceChanges.
 	CompactWorkspaceChanges(ctx context.Context, uid string, revision int64) (int, error)

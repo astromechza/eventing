@@ -4,6 +4,7 @@ go 1.21.0
 
 require (
 	github.com/jackc/pgx/v5 v5.4.3
+	github.com/lib/pq v1.10.9
 	github.com/pressly/goose/v3 v3.15.1
 	github.com/stretchr/testify v1.8.4
 	google.golang.org/protobuf v1.31.0
