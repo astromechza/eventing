@@ -2,16 +2,20 @@ package sqlmodel
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"slices"
-	"strings"
+
+	"google.golang.org/protobuf/proto"
+
+	"github.com/astromechza/eventing/internal/model"
 )
 
 type notifier struct {
 	id         int64
 	filterUids map[string]bool
-	output     chan string
+	output     chan *model.WorkspaceChangeNotification
 }
 
 // RunNotifier will execute the sql notify listener and upon each change will broadcast this to each connected channel.
@@ -32,14 +36,23 @@ func (s *SqlDataAccess) RunNotifier(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		uid := strings.Split(n.Payload, ",")[0]
+
+		raw, err := base64.RawURLEncoding.DecodeString(n.Payload)
+		if err != nil {
+			return fmt.Errorf("failed to decode payload: %w", err)
+		}
+		unpackedN := new(model.WorkspaceChangeNotification)
+		if err := proto.Unmarshal(raw, unpackedN); err != nil {
+			return fmt.Errorf("failed to unmarshal payload: %w", err)
+		}
+
 		func() {
 			s.notifierStateLock.RLock()
 			defer s.notifierStateLock.RUnlock()
 			for _, nfier := range s.notifiers {
-				if len(nfier.filterUids) == 0 || nfier.filterUids[uid] {
+				if len(nfier.filterUids) == 0 || nfier.filterUids[unpackedN.Uid] {
 					select {
-					case nfier.output <- n.Payload:
+					case nfier.output <- unpackedN:
 					default:
 						log.Print("closing channel")
 						close(nfier.output)
@@ -51,7 +64,7 @@ func (s *SqlDataAccess) RunNotifier(ctx context.Context) error {
 }
 
 // ListenForWorkspaceUidChanges will register a listener until the surrounding context is closed or output channel closed.
-func (s *SqlDataAccess) ListenForWorkspaceUidChanges(ctx context.Context, filterUids []string, output chan string) (error, func()) {
+func (s *SqlDataAccess) ListenForWorkspaceChanges(ctx context.Context, filterUids []string, output chan *model.WorkspaceChangeNotification) (error, func()) {
 	// don't go further if the context is already closed
 	if ctx.Err() != nil {
 		return ctx.Err(), nil

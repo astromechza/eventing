@@ -4,23 +4,27 @@ package eventing;
 import "google/protobuf/timestamp.proto";
 option go_package = "github.com/astromechza/eventing/internal/model";
 
+// A workspace object. This is the data layer representation and may be stored in the database.
 message Workspace {
+  // unique id of the item.
   string uid = 1;
-  int64 oldest_revision = 2;
-  int64 newest_revision = 3;
-  string display_name = 4;
-  google.protobuf.Timestamp created_at = 5;
+  // the current revision of the item
+  int64 revision = 2;
+  string display_name = 3;
+  // the time this resource was created
+  google.protobuf.Timestamp created_at = 4;
   enum Lifecycle {
     LIFECYCLE_ACTIVE = 0;
   }
-  Lifecycle lifecycle = 6;
+  Lifecycle lifecycle = 5;
 }
 
 message WorkspaceTombstone {
   string uid = 1;
-  int64 newest_revision = 2;
+  int64 revision = 2;
 }
 
+// The item in the change log.
 message WorkspaceChange {
   int64 entry = 1;
   google.protobuf.Timestamp at = 2;
@@ -28,4 +32,14 @@ message WorkspaceChange {
     Workspace workspace = 3;
     WorkspaceTombstone tombstone = 4;
   }
+}
+
+// The format of the encoded notification event.
+// This can't contain the whole workspace change, but holds just enough to be a reasonable summary of it.
+message WorkspaceChangeNotification {
+  int64 entry = 1;
+  google.protobuf.Timestamp at = 2;
+  string uid = 3;
+  int64 revision = 4;
+  bool tombstone = 5;
 }

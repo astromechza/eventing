@@ -72,8 +72,8 @@ func (s *SqlDataAccess) ListWorkspaceChanges(ctx context.Context, cursor []byte,
 		if tombstone {
 			change.Payload = &model.WorkspaceChange_Tombstone{
 				Tombstone: &model.WorkspaceTombstone{
-					Uid:            uid,
-					NewestRevision: revision,
+					Uid:      uid,
+					Revision: revision,
 				},
 			}
 		} else {

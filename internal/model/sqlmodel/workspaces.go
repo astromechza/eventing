@@ -2,6 +2,7 @@ package sqlmodel
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/astromechza/eventing/internal/model"
 	"github.com/astromechza/eventing/internal/ulid"
@@ -55,7 +57,7 @@ func (s *SqlDataAccess) BulkGetWorkspace(ctx context.Context, ids []string) (map
 }
 
 func (s *SqlDataAccess) CreateWorkspace(ctx context.Context, ws *model.Workspace) (*model.Workspace, error) {
-	ws.Uid, ws.OldestRevision, ws.NewestRevision = ulid.New(), 1, 1
+	ws.Uid, ws.Revision = ulid.New(), 1
 	raw, err := proto.Marshal(ws)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal workspace: %w", err)
@@ -71,7 +73,7 @@ func (s *SqlDataAccess) CreateWorkspace(ctx context.Context, ws *model.Workspace
 		}
 	}()
 
-	if _, err := tx.Exec(ctx, `INSERT INTO workspaces (uid, revision, raw) VALUES ($1, $2, $3)`, ws.Uid, ws.NewestRevision, raw); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO workspaces (uid, revision, raw) VALUES ($1, $2, $3)`, ws.Uid, ws.Revision, raw); err != nil {
 		return nil, fmt.Errorf("failed to insert new workspace: %w", err)
 	}
 
@@ -79,12 +81,17 @@ func (s *SqlDataAccess) CreateWorkspace(ctx context.Context, ws *model.Workspace
 		return nil, fmt.Errorf("failed to acquire changelog lock: %w", err)
 	}
 
+	at := ws.CreatedAt.AsTime()
 	var entry int64
-	if err := tx.QueryRow(ctx, `INSERT INTO workspace_changes (entry, uid, revision, at, raw, tombstone) VALUES (nextval('workspace_change_entry'), $1, $2, $3, $4, false) RETURNING entry`, ws.Uid, ws.NewestRevision, time.Now().UTC(), raw).Scan(&entry); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO workspace_changes (entry, uid, revision, at, raw, tombstone) VALUES (nextval('workspace_change_entry'), $1, $2, $3, $4, false) RETURNING entry`, ws.Uid, ws.Revision, at, raw).Scan(&entry); err != nil {
 		return nil, fmt.Errorf("failed to insert change entry: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, NotificationChannel, fmt.Sprintf("%s,%d,%v", ws.Uid, ws.NewestRevision, false)); err != nil {
+	packedN, err := packNotification(&model.WorkspaceChangeNotification{Entry: entry, At: timestamppb.New(at), Uid: ws.Uid, Revision: ws.Revision, Tombstone: false})
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack notification: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, NotificationChannel, packedN); err != nil {
 		return nil, fmt.Errorf("failed to emit notification: %w", err)
 	}
 
@@ -96,8 +103,8 @@ func (s *SqlDataAccess) CreateWorkspace(ctx context.Context, ws *model.Workspace
 }
 
 func (s *SqlDataAccess) UpdateWorkspace(ctx context.Context, ws *model.Workspace) (*model.Workspace, error) {
-	currentRevision := ws.NewestRevision
-	ws.NewestRevision += 1
+	currentRevision := ws.Revision
+	ws.Revision += 1
 	raw, err := proto.Marshal(ws)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal workspace: %w", err)
@@ -113,7 +120,7 @@ func (s *SqlDataAccess) UpdateWorkspace(ctx context.Context, ws *model.Workspace
 		}
 	}()
 
-	if _, err := tx.Exec(ctx, `UPDATE workspaces SET revision = $3, raw = $4 WHERE uid = $1 AND revision = $2`, ws.Uid, currentRevision, ws.NewestRevision, raw); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE workspaces SET revision = $3, raw = $4 WHERE uid = $1 AND revision = $2`, ws.Uid, currentRevision, ws.Revision, raw); err != nil {
 		return nil, fmt.Errorf("failed to insert new workspace: %w", err)
 	}
 
@@ -121,12 +128,17 @@ func (s *SqlDataAccess) UpdateWorkspace(ctx context.Context, ws *model.Workspace
 		return nil, fmt.Errorf("failed to acquire changelog lock: %w", err)
 	}
 
+	at := time.Now().UTC()
 	var entry int64
-	if err := tx.QueryRow(ctx, `INSERT INTO workspace_changes (entry, uid, revision, at, raw, tombstone) VALUES (nextval('workspace_change_entry'), $1, $2, $3, $4, false) RETURNING entry`, ws.Uid, ws.NewestRevision, time.Now().UTC(), raw).Scan(&entry); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO workspace_changes (entry, uid, revision, at, raw, tombstone) VALUES (nextval('workspace_change_entry'), $1, $2, $3, $4, false) RETURNING entry`, ws.Uid, ws.Revision, at, raw).Scan(&entry); err != nil {
 		return nil, fmt.Errorf("failed to insert change entry: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, NotificationChannel, fmt.Sprintf("%s,%d,%v", ws.Uid, ws.NewestRevision, false)); err != nil {
+	packedN, err := packNotification(&model.WorkspaceChangeNotification{Entry: entry, At: timestamppb.New(at), Uid: ws.Uid, Revision: ws.Revision, Tombstone: false})
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack notification: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, NotificationChannel, packedN); err != nil {
 		return nil, fmt.Errorf("failed to emit notification: %w", err)
 	}
 
@@ -148,7 +160,7 @@ func (s *SqlDataAccess) DeleteWorkspace(ctx context.Context, ws *model.Workspace
 		}
 	}()
 
-	if res, err := tx.Exec(ctx, `DELETE FROM workspaces WHERE uid = $1 AND revision = $2`, ws.Uid, ws.NewestRevision); err != nil {
+	if res, err := tx.Exec(ctx, `DELETE FROM workspaces WHERE uid = $1 AND revision = $2`, ws.Uid, ws.Revision); err != nil {
 		return fmt.Errorf("failed to delete workspace: %w", err)
 	} else if res.RowsAffected() == 0 {
 		return model.ErrIncorrectRevision{}
@@ -158,12 +170,17 @@ func (s *SqlDataAccess) DeleteWorkspace(ctx context.Context, ws *model.Workspace
 		return fmt.Errorf("failed to acquire changelog lock: %w", err)
 	}
 
+	at := time.Now().UTC()
 	var entry int64
-	if err := tx.QueryRow(ctx, `INSERT INTO workspace_changes (entry, uid, revision, at, raw, tombstone) VALUES (nextval('workspace_change_entry'), $1, $2, $3, null, true) RETURNING entry`, ws.Uid, ws.NewestRevision+1, time.Now().UTC()).Scan(&entry); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO workspace_changes (entry, uid, revision, at, raw, tombstone) VALUES (nextval('workspace_change_entry'), $1, $2, $3, null, true) RETURNING entry`, ws.Uid, ws.Revision+1, at).Scan(&entry); err != nil {
 		return fmt.Errorf("failed to insert change entry: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, NotificationChannel, fmt.Sprintf("%s,%d,%v", ws.Uid, ws.NewestRevision+1, true)); err != nil {
+	packedN, err := packNotification(&model.WorkspaceChangeNotification{Entry: entry, At: timestamppb.New(at), Uid: ws.Uid, Revision: ws.Revision + 1, Tombstone: true})
+	if err != nil {
+		return fmt.Errorf("failed to pack notification: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, NotificationChannel, packedN); err != nil {
 		return fmt.Errorf("failed to emit notification: %w", err)
 	}
 
@@ -172,4 +189,12 @@ func (s *SqlDataAccess) DeleteWorkspace(ctx context.Context, ws *model.Workspace
 	}
 
 	return nil
+}
+
+func packNotification(notification *model.WorkspaceChangeNotification) (string, error) {
+	raw, err := proto.Marshal(notification)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
 }

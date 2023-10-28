@@ -7,6 +7,16 @@ import (
 
 //go:generate protoc --go_out=. --go_opt=paths=source_relative types.proto
 
+// DataAccess
+//
+// To stream _all_ the changes back over this API to a consumer in the right order, you can do the following:
+// 1. Start listening to changes on the uid space
+// 2. Peak the head of the stream to get a cursor if you don't have one already
+// 3. Wait until a notification is received or until a max time elapses (N seconds)
+// 4. Pull all changes since the cursor and merge, note the max event you see
+// 5. Ignore any notifications that are lower than the max event from (4)
+// 6. Go to (3)
+// 7. If the connect breaks, resume from the last page and cursor you received
 type DataAccess interface {
 	// GetWorkspace returns the workspace with the given uid, we assume permission checks have _already_ been done on
 	// this uid. This method returns the workspace, an ErrNotExist, or some other error.
@@ -28,16 +38,14 @@ type DataAccess interface {
 	PeekLastWorkspaceChange(ctx context.Context) (cursor []byte, err error)
 	// ListWorkspaceChanges returns a list of changes for all workspaces since the last cursor.
 	ListWorkspaceChanges(ctx context.Context, cursor []byte, limit int, limitUids []string) (page *WorkspaceChangePage, err error)
-	// ListenForWorkspaceUidChanges will notify the given channel with the changed uid when we know that the item
+	// ListenForWorkspaceChanges will notify the given channel with the changed row when we know that the item
 	// has received a change. The channel will be closed if the client does not keep up with the update rate or the
 	// system is shutting down.
-	ListenForWorkspaceUidChanges(ctx context.Context, filterUids []string, output chan string) (error, func())
+	ListenForWorkspaceChanges(ctx context.Context, filterUids []string, output chan *WorkspaceChangeNotification) (error, func())
 	// CompactWorkspaceChanges will delete old workspace change entries for the given uid lower than revision. This is
 	// a very naive compaction algorithm and relies on the caller having already acquired knowledge via ListWorkspaceChanges.
 	CompactWorkspaceChanges(ctx context.Context, uid string, revision int64) (int, error)
 }
-
-// TODO: add created at to workspace change as well
 
 type WorkspaceChangePage struct {
 	Changes    []*WorkspaceChange

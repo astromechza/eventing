@@ -37,13 +37,13 @@ func TestRealSql(t *testing.T) {
 	defer subCancel()
 	go func() {
 		log.Print("running notifier")
-		assert.NoError(t, da.RunNotifier(subCtx))
+		assert.ErrorIs(t, da.RunNotifier(subCtx), context.Canceled)
 		log.Print("finished notifier")
 	}()
 
 	// setup a buffered channel and begin listening
-	listenChan := make(chan string, 2000)
-	err, listenCloser := da.ListenForWorkspaceUidChanges(rootContext, nil, listenChan)
+	listenChan := make(chan *model.WorkspaceChangeNotification, 2000)
+	err, listenCloser := da.ListenForWorkspaceChanges(rootContext, nil, listenChan)
 	require.NoError(t, err)
 	defer listenCloser()
 
@@ -58,8 +58,7 @@ func TestRealSql(t *testing.T) {
 		if assert.NoError(t, err) {
 			t.Logf("created workspace with uid %s", ws.Uid)
 			assert.NotEmpty(t, ws.GetUid())
-			assert.Equal(t, int64(1), ws.NewestRevision)
-			assert.Equal(t, ws.NewestRevision, ws.OldestRevision)
+			assert.Equal(t, int64(1), ws.Revision)
 			assert.Equal(t, "my workspace", ws.DisplayName)
 		}
 	})
@@ -69,8 +68,7 @@ func TestRealSql(t *testing.T) {
 		returned, err := da.GetWorkspace(rootContext, ws.Uid)
 		if assert.NoError(t, err) {
 			assert.Equal(t, ws.Uid, returned.Uid)
-			assert.Equal(t, ws.NewestRevision, returned.NewestRevision)
-			assert.Equal(t, ws.OldestRevision, returned.OldestRevision)
+			assert.Equal(t, ws.Revision, returned.Revision)
 			assert.Equal(t, "my workspace", returned.DisplayName)
 		}
 	})
@@ -88,8 +86,7 @@ func TestRealSql(t *testing.T) {
 			assert.Len(t, returned, 1)
 			if assert.Contains(t, returned, ws.Uid) {
 				assert.Equal(t, ws.Uid, returned[ws.Uid].Uid)
-				assert.Equal(t, ws.NewestRevision, returned[ws.Uid].NewestRevision)
-				assert.Equal(t, ws.OldestRevision, returned[ws.Uid].OldestRevision)
+				assert.Equal(t, ws.Revision, returned[ws.Uid].Revision)
 				assert.Equal(t, "my workspace", returned[ws.Uid].DisplayName)
 			}
 		}
@@ -99,8 +96,7 @@ func TestRealSql(t *testing.T) {
 		ws.DisplayName = ws.DisplayName + "2"
 		ws, err = da.UpdateWorkspace(rootContext, ws)
 		if assert.NoError(t, err) {
-			assert.Equal(t, int64(2), ws.NewestRevision)
-			assert.Equal(t, int64(1), ws.OldestRevision)
+			assert.Equal(t, int64(2), ws.Revision)
 			assert.Equal(t, "my workspace2", ws.DisplayName)
 		}
 	})
@@ -121,9 +117,9 @@ func TestRealSql(t *testing.T) {
 		if assert.NoError(t, err) {
 			filtered := changes.Changes
 			if assert.Len(t, filtered, 3) {
-				assert.Equal(t, 1, int(filtered[0].GetWorkspace().GetNewestRevision()))
-				assert.Equal(t, 2, int(filtered[1].GetWorkspace().GetNewestRevision()))
-				assert.Equal(t, 3, int(filtered[2].GetTombstone().GetNewestRevision()))
+				assert.Equal(t, 1, int(filtered[0].GetWorkspace().GetRevision()))
+				assert.Equal(t, 2, int(filtered[1].GetWorkspace().GetRevision()))
+				assert.Equal(t, 3, int(filtered[2].GetTombstone().GetRevision()))
 				assert.Greater(t, filtered[1].Entry, filtered[0].Entry)
 				assert.Greater(t, filtered[2].Entry, filtered[1].Entry)
 			}
