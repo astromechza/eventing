@@ -42,8 +42,8 @@ func TestRealSql(t *testing.T) {
 	}()
 
 	// setup a buffered channel and begin listening
-	listenChan := make(chan *model.WorkspaceChangeNotification, 2000)
-	err, listenCloser := da.ListenForWorkspaceChanges(rootContext, nil, listenChan)
+	listenChan := make(chan *model.WorkspaceChange, 2000)
+	err, listenCloser := da.RegisterForWorkspaceChanges(rootContext, nil, listenChan)
 	require.NoError(t, err)
 	defer listenCloser()
 
@@ -119,7 +119,7 @@ func TestRealSql(t *testing.T) {
 			if assert.Len(t, filtered, 3) {
 				assert.Equal(t, 1, int(filtered[0].GetWorkspace().GetRevision()))
 				assert.Equal(t, 2, int(filtered[1].GetWorkspace().GetRevision()))
-				assert.Equal(t, 3, int(filtered[2].GetTombstone().GetRevision()))
+				assert.Equal(t, 3, int(filtered[2].GetNotification().GetRevision()))
 				assert.Greater(t, filtered[1].Entry, filtered[0].Entry)
 				assert.Greater(t, filtered[2].Entry, filtered[1].Entry)
 			}

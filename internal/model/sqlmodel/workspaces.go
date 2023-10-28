@@ -87,7 +87,7 @@ func (s *SqlDataAccess) CreateWorkspace(ctx context.Context, ws *model.Workspace
 		return nil, fmt.Errorf("failed to insert change entry: %w", err)
 	}
 
-	packedN, err := packNotification(&model.WorkspaceChangeNotification{Entry: entry, At: timestamppb.New(at), Uid: ws.Uid, Revision: ws.Revision, Tombstone: false})
+	packedN, err := packNotification(entry, at, ws.Uid, ws.Revision, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack notification: %w", err)
 	}
@@ -134,7 +134,7 @@ func (s *SqlDataAccess) UpdateWorkspace(ctx context.Context, ws *model.Workspace
 		return nil, fmt.Errorf("failed to insert change entry: %w", err)
 	}
 
-	packedN, err := packNotification(&model.WorkspaceChangeNotification{Entry: entry, At: timestamppb.New(at), Uid: ws.Uid, Revision: ws.Revision, Tombstone: false})
+	packedN, err := packNotification(entry, at, ws.Uid, ws.Revision, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack notification: %w", err)
 	}
@@ -176,7 +176,7 @@ func (s *SqlDataAccess) DeleteWorkspace(ctx context.Context, ws *model.Workspace
 		return fmt.Errorf("failed to insert change entry: %w", err)
 	}
 
-	packedN, err := packNotification(&model.WorkspaceChangeNotification{Entry: entry, At: timestamppb.New(at), Uid: ws.Uid, Revision: ws.Revision + 1, Tombstone: true})
+	packedN, err := packNotification(entry, at, ws.Uid, ws.Revision+1, true)
 	if err != nil {
 		return fmt.Errorf("failed to pack notification: %w", err)
 	}
@@ -191,8 +191,15 @@ func (s *SqlDataAccess) DeleteWorkspace(ctx context.Context, ws *model.Workspace
 	return nil
 }
 
-func packNotification(notification *model.WorkspaceChangeNotification) (string, error) {
-	raw, err := proto.Marshal(notification)
+func packNotification(entry int64, at time.Time, uid string, rev int64, tombstone bool) (string, error) {
+	raw, err := proto.Marshal(&model.WorkspaceChange{
+		Entry: entry, At: timestamppb.New(at),
+		Payload: &model.WorkspaceChange_Notification{
+			Notification: &model.WorkspaceNotification{
+				Uid: uid, Revision: rev, Tombstone: tombstone,
+			},
+		},
+	})
 	if err != nil {
 		return "", err
 	}

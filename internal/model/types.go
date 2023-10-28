@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-//go:generate protoc --go_out=. --go_opt=paths=source_relative types.proto
+//go:generate protoc --proto_path=../../public --go_out=. --go_opt=paths=source_relative --go_opt=Mevents.proto=github.com/astromechza/eventing/internal/model ../../public/events.proto
 
 // DataAccess
 //
@@ -34,17 +34,19 @@ type DataAccess interface {
 	// DeleteWorkspace deletes the workspace permanently. It will return an error if the workspace doesn't already exist
 	// at the given revision number.
 	DeleteWorkspace(ctx context.Context, ws *Workspace) error
+
 	// PeekLastWorkspaceChange returns the last cursor available or an error
 	PeekLastWorkspaceChange(ctx context.Context) (cursor []byte, err error)
 	// ListWorkspaceChanges returns a list of changes for all workspaces since the last cursor.
-	ListWorkspaceChanges(ctx context.Context, cursor []byte, limit int, limitUids []string) (page *WorkspaceChangePage, err error)
-	// ListenForWorkspaceChanges will notify the given channel with the changed row when we know that the item
-	// has received a change. The channel will be closed if the client does not keep up with the update rate or the
-	// system is shutting down.
-	ListenForWorkspaceChanges(ctx context.Context, filterUids []string, output chan *WorkspaceChangeNotification) (error, func())
+	ListWorkspaceChanges(ctx context.Context, cursor []byte, limit int, filterUids []string) (page *WorkspaceChangePage, err error)
 	// CompactWorkspaceChanges will delete old workspace change entries for the given uid lower than revision. This is
 	// a very naive compaction algorithm and relies on the caller having already acquired knowledge via ListWorkspaceChanges.
 	CompactWorkspaceChanges(ctx context.Context, uid string, revision int64) (int, error)
+
+	// RegisterForWorkspaceChanges will notify the given channel with the changed row when we know that the item
+	// has received a change. The channel will be closed if the client does not keep up with the update rate or the
+	// system is shutting down.
+	RegisterForWorkspaceChanges(ctx context.Context, filterUids []string, output chan *WorkspaceChange) (error, func())
 }
 
 type WorkspaceChangePage struct {

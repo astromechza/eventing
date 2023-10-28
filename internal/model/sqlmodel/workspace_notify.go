@@ -15,7 +15,7 @@ import (
 type notifier struct {
 	id         int64
 	filterUids map[string]bool
-	output     chan *model.WorkspaceChangeNotification
+	output     chan *model.WorkspaceChange
 }
 
 // RunNotifier will execute the sql notify listener and upon each change will broadcast this to each connected channel.
@@ -41,16 +41,25 @@ func (s *SqlDataAccess) RunNotifier(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to decode payload: %w", err)
 		}
-		unpackedN := new(model.WorkspaceChangeNotification)
+		unpackedN := new(model.WorkspaceChange)
 		if err := proto.Unmarshal(raw, unpackedN); err != nil {
 			return fmt.Errorf("failed to unmarshal payload: %w", err)
+		}
+
+		var uid string
+		if unpackedN.GetWorkspace() != nil {
+			uid = unpackedN.GetWorkspace().Uid
+		} else if unpackedN.GetNotification() != nil {
+			uid = unpackedN.GetNotification().Uid
+		} else {
+			continue
 		}
 
 		func() {
 			s.notifierStateLock.RLock()
 			defer s.notifierStateLock.RUnlock()
 			for _, nfier := range s.notifiers {
-				if len(nfier.filterUids) == 0 || nfier.filterUids[unpackedN.Uid] {
+				if len(nfier.filterUids) == 0 || nfier.filterUids[uid] {
 					select {
 					case nfier.output <- unpackedN:
 					default:
@@ -63,8 +72,8 @@ func (s *SqlDataAccess) RunNotifier(ctx context.Context) error {
 	}
 }
 
-// ListenForWorkspaceUidChanges will register a listener until the surrounding context is closed or output channel closed.
-func (s *SqlDataAccess) ListenForWorkspaceChanges(ctx context.Context, filterUids []string, output chan *model.WorkspaceChangeNotification) (error, func()) {
+// RegisterForWorkspaceChanges will register a listener until the surrounding context is closed or output channel closed.
+func (s *SqlDataAccess) RegisterForWorkspaceChanges(ctx context.Context, filterUids []string, output chan *model.WorkspaceChange) (error, func()) {
 	// don't go further if the context is already closed
 	if ctx.Err() != nil {
 		return ctx.Err(), nil

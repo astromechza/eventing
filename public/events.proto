@@ -1,0 +1,46 @@
+syntax = "proto3";
+package workspaces;
+
+import "google/protobuf/timestamp.proto";
+
+// ==== events.proto ====
+// In this project, we are aiming to be event-centric where the change-log is the primary data store, and the database
+// is considered a consistent materialized view. For this reason, we store events as PB encoded items on the change log
+// with the last event being stored in the main database table as the relational view of the item.
+
+// A workspace object. This is the data layer representation of the current state and may be stored in the event
+// broker or database.
+message Workspace {
+  // unique id of the item.
+  string uid = 1;
+  // the current revision of the item
+  int64 revision = 2;
+  string display_name = 3;
+  // the time this resource was created
+  google.protobuf.Timestamp created_at = 4;
+  enum Lifecycle {
+    LIFECYCLE_ACTIVE = 0;
+  }
+  Lifecycle lifecycle = 5;
+}
+
+// A notification of some change to the item, without holding the actual state. This is notification of a new revision
+// and a tag announcing whether the item is considered tomb-stoned, or not.
+message WorkspaceNotification {
+  // unique id of the item.
+  string uid = 1;
+  // the current revision of the item
+  int64 revision = 2;
+  // whether this resource is considered deleted at any revision >= this one
+  bool tombstone = 3;
+}
+
+// The item in the change log containing either a full workspace, or a notification
+message WorkspaceChange {
+  int64 entry = 1;
+  google.protobuf.Timestamp at = 2;
+  oneof payload {
+    Workspace workspace = 3;
+    WorkspaceNotification notification = 4;
+  }
+}

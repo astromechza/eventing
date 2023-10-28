@@ -70,10 +70,11 @@ func (s *SqlDataAccess) ListWorkspaceChanges(ctx context.Context, cursor []byte,
 		change.Entry = entry
 		change.At = timestamppb.New(at)
 		if tombstone {
-			change.Payload = &model.WorkspaceChange_Tombstone{
-				Tombstone: &model.WorkspaceTombstone{
-					Uid:      uid,
-					Revision: revision,
+			change.Payload = &model.WorkspaceChange_Notification{
+				Notification: &model.WorkspaceNotification{
+					Uid:       uid,
+					Revision:  revision,
+					Tombstone: true,
 				},
 			}
 		} else {
