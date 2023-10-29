@@ -1,0 +1,8 @@
+package: public
+generate:
+  models: true
+  echo-server: true
+  strict-server: true
+import-mapping:
+  "./common-api.yaml": github.com/astromechza/eventing/internal/api/common
+output: server.gen.go

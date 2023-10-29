@@ -1,0 +1,126 @@
+openapi: 3.0.0
+info:
+  title: Workspaces API
+  version: 0.0.1
+paths:
+  /workspaces/{workspaceId}:
+    get:
+      operationId: getWorkspace
+      summary: Get a Workspace by id.
+      parameters:
+        - $ref: '#/components/parameters/workspaceIdPathParam'
+      responses:
+        "200":
+          description: "The workspace exists"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workspace'
+        "404":
+          $ref: './common-api.yaml#/components/responses/404'
+
+    patch:
+      operationId: patchWorkspace
+      summary: Update fields of the Workspace by id
+      parameters:
+        - $ref: '#/components/parameters/workspaceIdPathParam'
+      responses:
+        "202":
+          description: "The workspace was updated"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workspace'
+        "400":
+          $ref: './common-api.yaml#/components/responses/400'
+
+    delete:
+      operationId: deleteWorkspace
+      summary: Attempt to delete the Workspace by id
+      parameters:
+        - $ref: '#/components/parameters/workspaceIdPathParam'
+      responses:
+        "202":
+          description: "The workspace was updated into a deleting state"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workspace'
+        "204":
+          description: "The workspace was deleted"
+        "400":
+          $ref: './common-api.yaml#/components/responses/400'
+
+  /workspaces/:
+    post:
+      operationId: createWorkspace
+      summary: Create a new workspace
+      parameters:
+        - $ref: '#/components/parameters/idempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkspaceRequest'
+      responses:
+        "201":
+          description: "The workspace was created"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workspace'
+        "400":
+          $ref: './common-api.yaml#/components/responses/400'
+
+components:
+  headers:
+    Etag:
+      description: The Etag of a resource
+      example: "1234567890abcdef"
+      schema:
+        type: string
+  parameters:
+    workspaceIdPathParam:
+      name: workspaceId
+      in: path
+      required: true
+      schema:
+        type: string
+    idempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      description: The HTTP Idempotency-Key
+      example: "0xr$P0Cu4@DB"
+      required: false
+      schema:
+        type: string
+  schemas:
+    Workspace:
+      type: object
+      required:
+        - uid
+        - revision
+        - created_at
+        - display_name
+        - lifecycle
+      properties:
+        uid:
+          type: string
+        revision:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        display_name:
+          type: string
+        lifecycle:
+          type: string
+
+    CreateWorkspaceRequest:
+      type: object
+      required:
+        - display_name
+      properties:
+        display_name:
+          type: string

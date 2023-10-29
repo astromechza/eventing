@@ -148,6 +148,8 @@ func (x *Workspace) GetLifecycle() Workspace_Lifecycle {
 	return Workspace_LIFECYCLE_ACTIVE
 }
 
+// A notification of some change to the item, without holding the actual state. This is notification of a new revision
+// and a tag announcing whether the item is considered tomb-stoned, or not.
 type WorkspaceNotification struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

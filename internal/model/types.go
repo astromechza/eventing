@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-//go:generate protoc --proto_path=../../public --go_out=. --go_opt=paths=source_relative --go_opt=Mevents.proto=github.com/astromechza/eventing/internal/model ../../public/events.proto
+//go:generate protoc --proto_path=../../spec --go_out=. --go_opt=paths=source_relative --go_opt=Mevents.proto=github.com/astromechza/eventing/internal/model ../../spec/events.proto
 
 // DataAccess
 //

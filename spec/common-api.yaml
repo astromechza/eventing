@@ -1,0 +1,62 @@
+components:
+  headers:
+    Etag:
+      description: The Etag of a resource
+      example: "1234567890abcdef"
+      schema:
+        type: string
+  parameters:
+    idempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      description: The HTTP Idempotency-Key
+      example: "0xr$P0Cu4@DB"
+      required: false
+      schema:
+        type: string
+  responses:
+    400:
+      description: A problem occurred while calling the API.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    403:
+      description: A problem occurred while calling the API.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    404:
+      description: A problem occurred while calling the API.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    409:
+      description: A problem occurred while calling the API.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      required:
+        - status
+        - type
+        - title
+      properties:
+        status:
+          type: integer
+          example: 500
+        type:
+          type: string
+          example: "about:blank"
+        title:
+          type: string
+          example: "An internal error occurred"
+        detail:
+          type: string
+          example: "An error occurred while retrieving additional data"
+      additionalProperties: true
